@@ -13,7 +13,6 @@ class Player:
 
         self.visited_cells = []
 
-        # Information is learned only after visiting a cell.
         self.knowledge = {}
         self.possible_queen_cells = set()
 
