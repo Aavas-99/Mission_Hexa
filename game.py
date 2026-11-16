@@ -7,7 +7,7 @@ from config import PLAYER1_COLOR, PLAYER2_COLOR
 
 
 class MissionHexaGame:
-    def init(self):
+    def __init__(self):
         self.board = Board()
 
         self.players = [
