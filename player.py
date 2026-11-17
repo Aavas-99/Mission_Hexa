@@ -2,7 +2,7 @@ from config import INITIAL_HONEY
 
 
 class Player:
-    def init(self, name, color, is_human=True):
+    def __init__(self, name, color, is_human=True):
         self.name = name
         self.color = color
         self.is_human = is_human
