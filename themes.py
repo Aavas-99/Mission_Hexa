@@ -1,39 +1,58 @@
 THEMES = [
     {
-        "name": "Golden Hive",
-        "background": (24, 27, 34),
-        "panel": (38, 44, 55),
-        "cell": (232, 178, 48),
-        "visited": (75, 80, 85),
-        "text": (245, 245, 245),
-        "accent": (250, 190, 45),
-        "border": (20, 20, 22),
-        "legal_move": (70, 210, 125)
+        "name": "Meadow",
+        "background": (28, 39, 35),
+        "panel": (19, 29, 27),
+        "cell": (220, 202, 143),
+        "visited": (112, 132, 104),
+        "border": (48, 62, 52),
+        "legal_move": (255, 220, 80),
+        "text": (235, 239, 226),
+        "accent": (245, 190, 80),
+        "button": (57, 85, 70),
+        "button_hover": (78, 113, 91),
     },
     {
-        "name": "Forest Hive",
-        "background": (18, 35, 29),
-        "panel": (32, 55, 47),
-        "cell": (95, 165, 100),
-        "visited": (65, 78, 70),
-        "text": (240, 248, 242),
-        "accent": (130, 225, 145),
-        "border": (15, 25, 20),
-        "legal_move": (100, 230, 155)
+        "name": "Ocean",
+        "background": (16, 31, 49),
+        "panel": (11, 22, 38),
+        "cell": (150, 194, 207),
+        "visited": (71, 117, 145),
+        "border": (32, 64, 85),
+        "legal_move": (255, 215, 90),
+        "text": (230, 242, 248),
+        "accent": (100, 210, 220),
+        "button": (34, 75, 99),
+        "button_hover": (48, 104, 132),
     },
     {
-        "name": "Royal Hive",
-        "background": (31, 22, 43),
-        "panel": (53, 39, 68),
-        "cell": (168, 112, 210),
-        "visited": (79, 70, 90),
-        "text": (248, 242, 252),
-        "accent": (225, 170, 255),
-        "border": (20, 15, 28),
-        "legal_move": (90, 215, 190)
-    }
+        "name": "Lavender",
+        "background": (38, 31, 51),
+        "panel": (26, 20, 39),
+        "cell": (202, 177, 211),
+        "visited": (119, 91, 137),
+        "border": (71, 55, 83),
+        "legal_move": (255, 220, 100),
+        "text": (244, 235, 248),
+        "accent": (218, 160, 235),
+        "button": (85, 57, 104),
+        "button_hover": (112, 75, 137),
+    },
+    {
+        "name": "Ember",
+        "background": (45, 30, 26),
+        "panel": (30, 19, 18),
+        "cell": (219, 174, 132),
+        "visited": (139, 91, 65),
+        "border": (81, 49, 39),
+        "legal_move": (255, 224, 100),
+        "text": (250, 235, 222),
+        "accent": (255, 164, 91),
+        "button": (105, 57, 39),
+        "button_hover": (139, 75, 49),
+    },
 ]
 
 
-def get_theme(theme_index):
-    return THEMES[theme_index]
+def get_theme(index):
+    return THEMES[index % len(THEMES)]
