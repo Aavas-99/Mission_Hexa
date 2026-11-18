@@ -2,112 +2,124 @@ import random
 
 from board import Board
 from player import Player
-
 from config import PLAYER1_COLOR, PLAYER2_COLOR
 
 
 class MissionHexaGame:
-    def __init__(self):
+    def __init__(self, mode="human_minimax", difficulty="medium"):
+        self.mode = mode
+        self.difficulty = difficulty
         self.board = Board()
 
+        if mode == "ai_vs_ai":
+            p1_human, p2_human = False, False
+            p1_ai, p2_ai = "minimax", "mcts"
+        elif mode == "human_mcts":
+            p1_human, p2_human = True, False
+            p1_ai, p2_ai = None, "mcts"
+        elif mode == "human_human":
+            p1_human, p2_human = True, True
+            p1_ai, p2_ai = None, None
+        else:
+            p1_human, p2_human = True, False
+            p1_ai, p2_ai = None, "minimax"
+
         self.players = [
-            Player("Player 1", PLAYER1_COLOR, True),
-            Player("Player 2", PLAYER2_COLOR, True)
+            Player("Player 1", PLAYER1_COLOR, p1_human, p1_ai),
+            Player("Player 2", PLAYER2_COLOR, p2_human, p2_ai),
         ]
 
-        self.current_index = 0
+        self.current_index = random.randint(0, 1)
         self.turn = 0
-
         self.game_over = False
         self.winner = None
-
-        self.message = "Mission Hexa started."
+        self.message = "Find honey, avoid the hidden Queen Bee!"
+        self.simulation_mode = False
+        self.last_clues = {}
 
         self.initialize_players()
 
     def initialize_players(self):
-        safe_positions = [
-            position
-            for position in self.board.cells
-            if position != self.board.queen_position
-        ]
+        first = self.board.get_random_safe_position()
+        second = self.board.get_random_safe_position({first})
 
-        start1 = random.choice(safe_positions)
-        safe_positions.remove(start1)
+        for index, position in enumerate((first, second)):
+            player = self.players[index]
+            player.position = position
+            player.visited_cells.append(position)
 
-        start2 = random.choice(safe_positions)
+            cell = self.board.cells[position]
+            cell.visited = True
+            cell.owner = index
 
-        self.players[0].position = start1
-        self.players[1].position = start2
-
-        self.board.cells[start1].visited = True
-        self.board.cells[start2].visited = True
-
-        self.players[0].visited_cells.append(start1)
-        self.players[1].visited_cells.append(start2)
-
-        self.players[0].update_knowledge(self.board, start1)
-        self.players[1].update_knowledge(self.board, start2)
+            player.observe_cell(self.board, position)
 
     def current_player(self):
         return self.players[self.current_index]
 
-    def other_player(self):
-        return self.players[1 - self.current_index]
+    def opponent(self, player):
+        return self.players[1 - self.players.index(player)]
 
     def legal_moves(self, player):
-        if not player.alive:
+        if player is None or not player.alive or player.position is None:
             return []
 
-        moves = []
+        result = []
+        opponent = self.opponent(player)
 
         for position in self.board.get_neighbors(player.position):
             cell = self.board.cells[position]
-
             if cell.visited:
                 continue
-
-            if player.honey < cell.bees:
+            if opponent.alive and position == opponent.position:
                 continue
+            if cell.bees > player.honey:
+                continue
+            result.append(position)
 
-            moves.append(position)
-
-        return moves
+        return result
 
     def move_player(self, player, position):
-        if position not in self.legal_moves(player):
+        if self.game_over:
+            return False
+        if player not in self.players or position not in self.legal_moves(player):
             return False
 
         cell = self.board.cells[position]
-
         player.position = position
         player.visited_cells.append(position)
-
         cell.visited = True
+        cell.owner = self.players.index(player)
 
-        # Entering the Queen Bee cell means instant death.
-        if cell.has_queen:
+        # Queen location is checked only by the actual game engine.
+        if (not self.simulation_mode and
+                position == self.board.queen_position):
             player.alive = False
             self.game_over = True
-            self.winner = self.other_player()
-
-            self.message = f"{player.name} entered the Queen Bee cell!"
+            self.winner = self.opponent(player)
+            self.message = (
+                f"{player.name} found the Queen Bee and was eliminated! "
+                f"{self.winner.name} wins."
+            )
             return True
 
         player.honey -= cell.bees
         player.honey += cell.honey
 
-        pheromone = player.update_knowledge(self.board, position)
-
-        if pheromone:
-            pheromone_text = "Royal Pheromone detected!"
+        if not self.simulation_mode:
+            clue = player.observe_cell(self.board, position)
+            self.last_clues[player.name] = clue
+            if clue:
+                clue_text = "Royal pheromone detected nearby!"
+            else:
+                clue_text = "No royal pheromone detected."
+            self.message = (
+                f"{player.name}: paid {cell.bees} honey, collected "
+                f"{cell.honey}. {clue_text}"
+            )
         else:
-            pheromone_text = "No Royal Pheromone."
-
-        self.message = (
-            f"{player.name}: +{cell.honey} honey, "
-            f"-{cell.bees} bee cost. {pheromone_text}"
-        )
+            # Hypothetical visits do not reveal unknown pheromone data.
+            self.message = f"{player.name} moved to {position}."
 
         return True
 
@@ -115,21 +127,22 @@ class MissionHexaGame:
         self.current_index = 1 - self.current_index
 
     def complete_turn(self):
+        if self.game_over:
+            return
         self.turn += 1
-
-        self.board.update_environment(self.turn)
-
+        self.board.update_environment()
         self.switch_turn()
         self.check_game_over()
 
     def pass_turn(self):
-        player = self.current_player()
-
-        self.message = f"{player.name} has no legal moves and passes."
-
+        if self.game_over:
+            return
+        if self.legal_moves(self.current_player()):
+            return
+        name = self.current_player().name
+        self.message = f"{name} has no legal moves and passes."
         self.turn += 1
-        self.board.update_environment(self.turn)
-
+        self.board.update_environment()
         self.switch_turn()
         self.check_game_over()
 
@@ -137,17 +150,26 @@ class MissionHexaGame:
         if self.game_over:
             return
 
-        player1_moves = self.legal_moves(self.players[0])
-        player2_moves = self.legal_moves(self.players[1])
-
-        if not player1_moves and not player2_moves:
+        if not self.legal_moves(self.players[0]) and not self.legal_moves(self.players[1]):
             self.game_over = True
-
-            if self.players[0].honey > self.players[1].honey:
-                self.winner = self.players[0]
-            elif self.players[1].honey > self.players[0].honey:
-                self.winner = self.players[1]
+            p1, p2 = self.players
+            if p1.honey > p2.honey:
+                self.winner = p1
+                self.message = f"Both players are stuck. {p1.name} wins on honey!"
+            elif p2.honey > p1.honey:
+                self.winner = p2
+                self.message = f"Both players are stuck. {p2.name} wins on honey!"
             else:
                 self.winner = None
+                self.message = "Both players are stuck. The game is a draw!"
 
-            self.message = "Both players have no legal moves."
+    def clone_for_search(self):
+        """
+        Search AIs use deepcopy and then enable simulation_mode.
+        This helper is available for external experiments.
+        """
+        import copy
+        clone = copy.deepcopy(self)
+        clone.simulation_mode = True
+        clone.board.queen_position = None
+        return clone

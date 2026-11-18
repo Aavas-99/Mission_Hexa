@@ -2,189 +2,179 @@ import copy
 import math
 import random
 
-from fuzzy import fuzzy_move_score
-from minimax_ai import simulate_move
+from config import MCTS_ITERATIONS_WEAK, MCTS_ITERATIONS_STRONG
+from fuzzy import evaluate_move
 
 
 class MCTSNode:
-    def __init__(
-        self,
-        game,
-        player_index,
-        root_player_index,
-        parent=None,
-        move=None
-    ):
-        self.game = game
-        self.player_index = player_index
-        self.root_player_index = root_player_index
-
+    def __init__(self, state, parent=None, move=None):
+        self.state = state
         self.parent = parent
         self.move = move
-
         self.children = []
-
         self.visits = 0
-        self.wins = 0.0
-
-        player = game.players[player_index]
-        self.untried_moves = game.legal_moves(player)
-
-    def uct_score(self):
-        if self.visits == 0:
-            return float("inf")
-
-        exploitation = self.wins / self.visits
-
-        exploration = 1.41 * math.sqrt(
-            math.log(self.parent.visits + 1) / self.visits
+        self.total_reward = 0.0
+        self.untried_moves = (
+            list(state.legal_moves(state.current_player()))
+            if not state.game_over else []
         )
 
-        return exploitation + exploration
 
-    def best_child(self):
-        return max(
-            self.children,
-            key=lambda child: child.uct_score()
-        )
+class MCTSAI:
+    """Monte Carlo Tree Search using UCT and fuzzy-guided rollouts."""
 
-    def expand(self):
-        if not self.untried_moves:
+    def __init__(self, difficulty="strong"):
+        difficulty = difficulty.lower()
+        if difficulty == "easy":
+            self.iterations = 30
+        elif difficulty == "medium":
+            self.iterations = MCTS_ITERATIONS_WEAK
+        else:
+            self.iterations = MCTS_ITERATIONS_STRONG
+        self.exploration_constant = math.sqrt(2)
+        self.rollout_depth = 16
+        self.simulations_completed = 0
+
+    def choose_move(self, game, player):
+        legal = game.legal_moves(player)
+        if not legal:
             return None
+        if len(legal) == 1:
+            return legal[0]
 
-        player = self.game.players[self.player_index]
+        root_index = game.players.index(player)
+        root_state = self._safe_copy(game)
+        root = MCTSNode(root_state)
+        self.simulations_completed = 0
 
-        self.untried_moves.sort(
-            key=lambda move: fuzzy_move_score(
-                player,
-                self.game.board.cells[move],
-                move
-            ),
-            reverse=True
-        )
+        for _ in range(self.iterations):
+            node = root
 
-        move = self.untried_moves.pop(0)
+            # Selection
+            while not node.untried_moves and node.children and not node.state.game_over:
+                node = self._select_child(node, root_index)
 
-        new_game = simulate_move(
-            self.game,
-            self.player_index,
-            move
-        )
+            # Expansion
+            if node.untried_moves and not node.state.game_over:
+                move = self._pick_expansion_move(
+                    node.state, node.untried_moves, player
+                )
+                node.untried_moves.remove(move)
+                actor_index = node.state.current_index
+                child_state = self._apply_move(node.state, actor_index, move)
+                child = MCTSNode(child_state, node, move)
+                node.children.append(child)
+                node = child
 
-        child = MCTSNode(
-            new_game,
-            1 - self.player_index,
-            self.root_player_index,
-            self,
-            move
-        )
+            # Simulation and backpropagation
+            reward = self._rollout(node.state, root_index, player)
+            self.simulations_completed += 1
+            while node is not None:
+                node.visits += 1
+                node.total_reward += reward
+                node = node.parent
 
-        self.children.append(child)
-
-        return child
-
-
-def mcts_rollout(game, root_player_index, max_steps=10):
-    simulation = copy.deepcopy(game)
-
-    steps = 0
-
-    while not simulation.game_over and steps < max_steps:
-        player = simulation.current_player()
-
-        moves = simulation.legal_moves(player)
-
-        if not moves:
-            simulation.switch_turn()
-            steps += 1
-            continue
-
-        scores = []
-
-        for move in moves:
-            score = fuzzy_move_score(
-                player,
-                simulation.board.cells[move],
-                move
+        if not root.children:
+            return max(
+                legal,
+                key=lambda p: evaluate_move(
+                    player, game.board.cells[p], p, player
+                ),
             )
 
-            scores.append(score + 1)
+        return max(root.children, key=lambda child: child.visits).move
 
-        move = random.choices(
+    def _safe_copy(self, game):
+        state = copy.deepcopy(game)
+        state.simulation_mode = True
+        state.board.queen_position = None
+        return state
+
+    def _apply_move(self, state, player_index, move):
+        child = copy.deepcopy(state)
+        child.simulation_mode = True
+        child.board.queen_position = None
+        child.move_player(child.players[player_index], move)
+        if not child.game_over:
+            child.complete_turn()
+        return child
+
+    def _select_child(self, node, root_index):
+        maximizing = node.state.current_index == root_index
+        best, best_value = None, -float("inf")
+
+        for child in node.children:
+            if child.visits == 0:
+                return child
+            exploitation = child.total_reward / child.visits
+            if not maximizing:
+                exploitation = -exploitation
+            exploration = self.exploration_constant * math.sqrt(
+                math.log(max(1, node.visits)) / child.visits
+            )
+            value = exploitation + exploration
+            if value > best_value:
+                best, best_value = child, value
+        return best
+
+    def _pick_expansion_move(self, state, moves, root_player):
+        actor = state.current_player()
+        ranked = sorted(
             moves,
-            weights=scores,
-            k=1
-        )[0]
-
-        simulation.move_player(player, move)
-
-        if not simulation.game_over:
-            simulation.switch_turn()
-
-        steps += 1
-
-    root_player = simulation.players[root_player_index]
-    opponent = simulation.players[1 - root_player_index]
-
-    if not root_player.alive:
-        return 0.0
-
-    if not opponent.alive:
-        return 1.0
-
-    if root_player.honey > opponent.honey:
-        return 1.0
-
-    if root_player.honey == opponent.honey:
-        return 0.5
-
-    return 0.0
-
-
-def mcts_best_move(game, player, iterations=50):
-    root_index = game.players.index(player)
-
-    root = MCTSNode(
-        copy.deepcopy(game),
-        root_index,
-        root_index
-    )
-
-    if not root.untried_moves:
-        return None
-
-    for _ in range(iterations):
-        node = root
-
-        while (
-            not node.untried_moves
-            and node.children
-            and not node.game.game_over
-        ):
-            node = node.best_child()
-
-        if node.untried_moves and not node.game.game_over:
-            expanded = node.expand()
-
-            if expanded is not None:
-                node = expanded
-
-        result = mcts_rollout(
-            node.game,
-            root_index
+            key=lambda p: evaluate_move(
+                actor, state.board.cells[p], p, root_player
+            ),
+            reverse=True,
         )
+        pool = ranked[:min(3, len(ranked))]
+        return random.choice(pool)
 
-        while node is not None:
-            node.visits += 1
-            node.wins += result
-            node = node.parent
+    def _rollout(self, state, root_index, root_player):
+        current = copy.deepcopy(state)
+        current.simulation_mode = True
+        current.board.queen_position = None
 
-    if not root.children:
-        return random.choice(game.legal_moves(player))
+        for _ in range(self.rollout_depth):
+            if current.game_over:
+                break
 
-    best = max(
-        root.children,
-        key=lambda child: child.visits
-    )
+            actor = current.current_player()
+            moves = current.legal_moves(actor)
 
-    return best.move
+            if not moves:
+                current.pass_turn()
+                continue
+
+            # Fuzzy-guided policy with exploration.
+            ranked = sorted(
+                moves,
+                key=lambda p: evaluate_move(
+                    actor, current.board.cells[p], p, root_player
+                ),
+                reverse=True,
+            )
+            if random.random() < 0.75:
+                move = random.choice(ranked[:min(3, len(ranked))])
+            else:
+                move = random.choice(moves)
+
+            current = self._apply_move(
+                current, current.current_index, move
+            )
+
+        me = current.players[root_index]
+        opponent = current.players[1 - root_index]
+
+        if current.game_over:
+            if current.winner is me:
+                return 1.0
+            if current.winner is opponent:
+                return -1.0
+            return 0.0
+
+        honey_component = math.tanh((me.honey - opponent.honey) / 20.0)
+        mobility_component = math.tanh(
+            (len(current.legal_moves(me)) -
+             len(current.legal_moves(opponent))) / 3.0
+        )
+        return 0.85 * honey_component + 0.15 * mobility_component
