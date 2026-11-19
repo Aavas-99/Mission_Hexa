@@ -2,8 +2,7 @@ import random
 
 from config import (
     ROWS, COLS, MIN_CELL_HONEY, MAX_CELL_HONEY,
-    MIN_BEES, MAX_BEES, HONEY_UPDATE_INTERVAL,
-    BEE_UPDATE_INTERVAL,
+    MIN_BEES, MAX_BEES,
 )
 from hex_cell import HexCell
 
@@ -12,7 +11,6 @@ class Board:
     def __init__(self):
         self.cells = {}
         self.queen_position = None
-        self.environment_turn = 0
         self.generate_board()
 
     def generate_board(self):
@@ -25,7 +23,6 @@ class Board:
                     random.randint(MIN_BEES, MAX_BEES),
                 )
         self.queen_position = random.choice(list(self.cells))
-        self.environment_turn = 0
 
     def is_valid_position(self, position):
         return position in self.cells
@@ -58,29 +55,6 @@ class Board:
         if self.queen_position is None:
             return None
         return self.queen_position in self.get_neighbors(position)
-
-    def update_environment(self):
-        self.environment_turn += 1
-
-        if (HONEY_UPDATE_INTERVAL > 0 and
-                self.environment_turn % HONEY_UPDATE_INTERVAL == 0):
-            for cell in self.cells.values():
-                if not cell.visited:
-                    cell.honey = max(
-                        MIN_CELL_HONEY,
-                        min(MAX_CELL_HONEY,
-                            cell.honey + random.choice([-3, -2, -1, 1, 2, 3]))
-                    )
-
-        if (BEE_UPDATE_INTERVAL > 0 and
-                self.environment_turn % BEE_UPDATE_INTERVAL == 0):
-            for cell in self.cells.values():
-                if not cell.visited:
-                    cell.bees = max(
-                        MIN_BEES,
-                        min(MAX_BEES,
-                            cell.bees + random.choice([-1, 1]))
-                    )
 
     def get_cell(self, position):
         return self.cells.get(position)

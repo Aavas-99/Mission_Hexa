@@ -54,6 +54,9 @@ class MissionHexaGame:
 
             player.observe_cell(self.board, position)
 
+        for player in self.players:
+            player.update_possible_queen_cells(self.board)
+
     def current_player(self):
         return self.players[self.current_index]
 
@@ -91,9 +94,7 @@ class MissionHexaGame:
         cell.visited = True
         cell.owner = self.players.index(player)
 
-        # Queen location is checked only by the actual game engine.
-        if (not self.simulation_mode and
-                position == self.board.queen_position):
+        if position == self.board.queen_position:
             player.alive = False
             self.game_over = True
             self.winner = self.opponent(player)
@@ -108,6 +109,8 @@ class MissionHexaGame:
 
         if not self.simulation_mode:
             clue = player.observe_cell(self.board, position)
+            for observer in self.players:
+                observer.update_possible_queen_cells(self.board)
             self.last_clues[player.name] = clue
             if clue:
                 clue_text = "Royal pheromone detected nearby!"
@@ -130,7 +133,6 @@ class MissionHexaGame:
         if self.game_over:
             return
         self.turn += 1
-        self.board.update_environment()
         self.switch_turn()
         self.check_game_over()
 
@@ -142,7 +144,6 @@ class MissionHexaGame:
         name = self.current_player().name
         self.message = f"{name} has no legal moves and passes."
         self.turn += 1
-        self.board.update_environment()
         self.switch_turn()
         self.check_game_over()
 

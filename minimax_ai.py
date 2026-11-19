@@ -1,8 +1,11 @@
 import copy
 import math
 
+from ai_heuristics import (
+    avoid_certain_queen_moves,
+    best_future_honey_gain,
+)
 from config import MINIMAX_DEPTH_WEAK, MINIMAX_DEPTH_STRONG
-from fuzzy import evaluate_move, evaluate_position
 
 class MinimaxAI:
     def __init__(self, difficulty="strong"):
@@ -17,7 +20,9 @@ class MinimaxAI:
         self.pruned_branches = 0
 
     def choose_move(self, game, player):
-        moves = game.legal_moves(player)
+        moves = avoid_certain_queen_moves(
+            player, game.legal_moves(player)
+        )
         if not moves:
             return None
 
@@ -26,13 +31,9 @@ class MinimaxAI:
         root_index = game.players.index(player)
         root = self._copy_for_search(game)
 
-        ordered = sorted(
-            moves,
-            key=lambda p: evaluate_move(
-                player, game.board.cells[p], p, player
-            ),
-            reverse=True,
-        )
+        ordered = sorted(moves, key=lambda p: self._move_order_score(
+            player, game.board.cells[p], p
+        ), reverse=True)
 
         best_move = ordered[0]
         best_value = -math.inf
@@ -41,8 +42,9 @@ class MinimaxAI:
         for move in ordered:
             child = self._apply_move(root, root_index, move)
             value = self._search(
-                child, self.depth - 1, alpha, beta, root_index, player
+                child, self.depth - 1, alpha, beta, root_index
             )
+            value -= self._queen_move_risk(player, move)
             if value > best_value:
                 best_value, best_move = value, move
             alpha = max(alpha, best_value)
@@ -65,29 +67,30 @@ class MinimaxAI:
             child.complete_turn()
         return child
 
-    def _search(self, state, depth, alpha, beta, root_index, root_player):
+    def _search(self, state, depth, alpha, beta, root_index):
         self.nodes_explored += 1
         if state.game_over:
             return self._terminal_value(state, root_index)
         if depth <= 0:
-            return self._evaluate(state, root_index, root_player)
+            return self._evaluate(state, root_index)
 
         actor = state.current_player()
         actor_index = state.players.index(actor)
-        moves = state.legal_moves(actor)
+        moves = avoid_certain_queen_moves(
+            actor, state.legal_moves(actor)
+        )
         if not moves:
             child = copy.deepcopy(state)
             child.simulation_mode = True
-            child.board.queen_position = None
             child.pass_turn()
             return self._search(
-                child, depth - 1, alpha, beta, root_index, root_player
+                child, depth - 1, alpha, beta, root_index
             )
 
         maximizing = actor_index == root_index
         moves.sort(
-            key=lambda p: evaluate_move(
-                actor, state.board.cells[p], p, root_player
+            key=lambda p: self._move_order_score(
+                actor, state.board.cells[p], p
             ),
             reverse=maximizing,
         )
@@ -95,12 +98,12 @@ class MinimaxAI:
             value = -math.inf
             for move in moves:
                 child = self._apply_move(state, actor_index, move)
+                move_value = self._search(
+                    child, depth - 1, alpha, beta, root_index
+                ) - self._queen_move_risk(actor, move)
                 value = max(
                     value,
-                    self._search(
-                        child, depth - 1, alpha, beta,
-                        root_index, root_player
-                    ),
+                    move_value,
                 )
                 alpha = max(alpha, value)
                 if beta <= alpha:
@@ -111,12 +114,12 @@ class MinimaxAI:
         value = math.inf
         for move in moves:
             child = self._apply_move(state, actor_index, move)
+            move_value = self._search(
+                child, depth - 1, alpha, beta, root_index
+            ) + self._queen_move_risk(actor, move)
             value = min(
                 value,
-                self._search(
-                    child, depth - 1, alpha, beta,
-                    root_index, root_player
-                ),
+                move_value,
             )
             beta = min(beta, value)
             if beta <= alpha:
@@ -124,7 +127,7 @@ class MinimaxAI:
                 break
         return value
 
-    def _evaluate(self, state, root_index, root_player):
+    def _evaluate(self, state, root_index):
         me = state.players[root_index]
         other = state.players[1 - root_index]
         score = float(me.honey - other.honey)
@@ -132,12 +135,26 @@ class MinimaxAI:
         my_moves = state.legal_moves(me)
         their_moves = state.legal_moves(other)
         score += 1.7 * (len(my_moves) - len(their_moves))
-
-        score += 0.15 * (
-            evaluate_position(me, state.board, root_player)
-            - evaluate_position(other, state.board, root_player)
+        score += 0.35 * (
+            best_future_honey_gain(state, me)
+            - best_future_honey_gain(state, other)
         )
+
         return score
+
+    @staticmethod
+    def _move_order_score(player, cell, position):
+        return (
+            cell.honey - cell.bees
+            - MinimaxAI._queen_move_risk(player, position)
+        )
+
+    @staticmethod
+    def _queen_move_risk(player, position):
+        candidates = player.possible_queen_cells
+        if position in candidates and candidates:
+            return 10000.0 / len(candidates)
+        return 0.0
 
     def _terminal_value(self, state, root_index):
         me = state.players[root_index]
