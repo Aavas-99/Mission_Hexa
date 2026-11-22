@@ -14,19 +14,23 @@ class MissionHexaGame:
         if mode == "ai_vs_ai":
             p1_human, p2_human = False, False
             p1_ai, p2_ai = "minimax", "mcts"
+            p1_name, p2_name = "Minimax", "MCTS"
         elif mode == "human_mcts":
             p1_human, p2_human = True, False
             p1_ai, p2_ai = None, "mcts"
+            p1_name, p2_name = "Human", "MCTS"
         elif mode == "human_human":
             p1_human, p2_human = True, True
             p1_ai, p2_ai = None, None
+            p1_name, p2_name = "Human 1", "Human 2"
         else:
             p1_human, p2_human = True, False
             p1_ai, p2_ai = None, "minimax"
+            p1_name, p2_name = "Human", "Minimax"
 
         self.players = [
-            Player("Player 1", PLAYER1_COLOR, p1_human, p1_ai),
-            Player("Player 2", PLAYER2_COLOR, p2_human, p2_ai),
+            Player(p1_name, PLAYER1_COLOR, p1_human, p1_ai),
+            Player(p2_name, PLAYER2_COLOR, p2_human, p2_ai),
         ]
 
         self.current_index = random.randint(0, 1)
@@ -34,6 +38,8 @@ class MissionHexaGame:
         self.game_over = False
         self.winner = None
         self.message = "Find honey, avoid the hidden Queen Bee!"
+        self.last_move_by = None
+        self.last_move_reasoning = None
         self.simulation_mode = False
         self.last_clues = {}
 
@@ -53,6 +59,9 @@ class MissionHexaGame:
             cell.owner = index
 
             player.observe_cell(self.board, position)
+
+        for player in self.players:
+            player.update_possible_queen_cells(self.board)
 
     def current_player(self):
         return self.players[self.current_index]
@@ -77,6 +86,9 @@ class MissionHexaGame:
                 continue
             result.append(position)
 
+        if result == [self.board.queen_position]:
+            return []
+
         return result
 
     def move_player(self, player, position):
@@ -90,10 +102,10 @@ class MissionHexaGame:
         player.visited_cells.append(position)
         cell.visited = True
         cell.owner = self.players.index(player)
+        self.last_move_by = player
+        self.last_move_reasoning = None
 
-        # Queen location is checked only by the actual game engine.
-        if (not self.simulation_mode and
-                position == self.board.queen_position):
+        if position == self.board.queen_position:
             player.alive = False
             self.game_over = True
             self.winner = self.opponent(player)
@@ -108,6 +120,8 @@ class MissionHexaGame:
 
         if not self.simulation_mode:
             clue = player.observe_cell(self.board, position)
+            for observer in self.players:
+                observer.update_possible_queen_cells(self.board)
             self.last_clues[player.name] = clue
             if clue:
                 clue_text = "Royal pheromone detected nearby!"
@@ -130,7 +144,6 @@ class MissionHexaGame:
         if self.game_over:
             return
         self.turn += 1
-        self.board.update_environment()
         self.switch_turn()
         self.check_game_over()
 
@@ -139,10 +152,12 @@ class MissionHexaGame:
             return
         if self.legal_moves(self.current_player()):
             return
+        if self.mode == "ai_vs_ai":
+            self.check_game_over()
+            return
         name = self.current_player().name
         self.message = f"{name} has no legal moves and passes."
         self.turn += 1
-        self.board.update_environment()
         self.switch_turn()
         self.check_game_over()
 
@@ -150,18 +165,43 @@ class MissionHexaGame:
         if self.game_over:
             return
 
-        if not self.legal_moves(self.players[0]) and not self.legal_moves(self.players[1]):
-            self.game_over = True
-            p1, p2 = self.players
-            if p1.honey > p2.honey:
-                self.winner = p1
-                self.message = f"Both players are stuck. {p1.name} wins on honey!"
-            elif p2.honey > p1.honey:
-                self.winner = p2
-                self.message = f"Both players are stuck. {p2.name} wins on honey!"
-            else:
-                self.winner = None
-                self.message = "Both players are stuck. The game is a draw!"
+        p1, p2 = self.players
+        p1_has_moves = bool(self.legal_moves(p1))
+        p2_has_moves = bool(self.legal_moves(p2))
+
+        if self.mode == "ai_vs_ai":
+            if not p1_has_moves and not p2_has_moves:
+                self._finish_on_honey("Both players are stuck.")
+            elif not p1_has_moves or not p2_has_moves:
+                active = p1 if p1_has_moves else p2
+                stuck = p2 if p1_has_moves else p1
+                if active.honey > stuck.honey:
+                    self._finish_on_honey(
+                        f"{active.name} leads while {stuck.name} is stuck."
+                    )
+                else:
+                    self.current_index = self.players.index(active)
+                    self.message = (
+                        f"{stuck.name} has no legal moves. "
+                        f"{active.name} continues."
+                    )
+            return
+
+        if not p1_has_moves and not p2_has_moves:
+            self._finish_on_honey("Both players are stuck.")
+
+    def _finish_on_honey(self, reason):
+        p1, p2 = self.players
+        self.game_over = True
+        if p1.honey > p2.honey:
+            self.winner = p1
+            self.message = f"{reason} {p1.name} wins on honey!"
+        elif p2.honey > p1.honey:
+            self.winner = p2
+            self.message = f"{reason} {p2.name} wins on honey!"
+        else:
+            self.winner = None
+            self.message = f"{reason} The game is a draw!"
 
     def clone_for_search(self):
         """

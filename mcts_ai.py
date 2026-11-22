@@ -2,8 +2,14 @@ import copy
 import math
 import random
 
-from config import MCTS_ITERATIONS_WEAK, MCTS_ITERATIONS_STRONG
-from fuzzy import evaluate_move
+from ai_heuristics import avoid_certain_queen_moves, move_profit_score
+from config import (
+    MCTS_ITERATIONS_EASY,
+    MCTS_ITERATIONS_MEDIUM,
+    MCTS_ITERATIONS_HARD,
+    MCTS_ITERATIONS_WEAK,
+    MCTS_ITERATIONS_STRONG,
+)
 
 
 class MCTSNode:
@@ -15,32 +21,44 @@ class MCTSNode:
         self.visits = 0
         self.total_reward = 0.0
         self.untried_moves = (
-            list(state.legal_moves(state.current_player()))
+            avoid_certain_queen_moves(
+                state.current_player(),
+                state.legal_moves(state.current_player()),
+            )
             if not state.game_over else []
         )
 
 
 class MCTSAI:
-    """Monte Carlo Tree Search using UCT and fuzzy-guided rollouts."""
+    """Monte Carlo Tree Search using UCT and random rollouts."""
 
-    def __init__(self, difficulty="strong"):
+    def __init__(self, difficulty="hard"):
         difficulty = difficulty.lower()
         if difficulty == "easy":
-            self.iterations = 30
+            self.iterations = MCTS_ITERATIONS_EASY
         elif difficulty == "medium":
-            self.iterations = MCTS_ITERATIONS_WEAK
+            self.iterations = MCTS_ITERATIONS_MEDIUM
         else:
-            self.iterations = MCTS_ITERATIONS_STRONG
+            self.iterations = MCTS_ITERATIONS_HARD
         self.exploration_constant = math.sqrt(2)
         self.rollout_depth = 16
         self.simulations_completed = 0
+        self.last_reasoning = None
 
     def choose_move(self, game, player):
-        legal = game.legal_moves(player)
+        legal = avoid_certain_queen_moves(
+            player, game.legal_moves(player)
+        )
         if not legal:
             return None
         if len(legal) == 1:
-            return legal[0]
+            position = legal[0]
+            cell = game.board.cells[position]
+            self.last_reasoning = (
+                f"Selected the only safe move, {position}; it offers "
+                f"{cell.honey - cell.bees:+d} net honey."
+            )
+            return position
 
         root_index = game.players.index(player)
         root_state = self._safe_copy(game)
@@ -57,7 +75,8 @@ class MCTSAI:
             # Expansion
             if node.untried_moves and not node.state.game_over:
                 move = self._pick_expansion_move(
-                    node.state, node.untried_moves, player
+                    node.untried_moves,
+                    node.state,
                 )
                 node.untried_moves.remove(move)
                 actor_index = node.state.current_index
@@ -67,7 +86,7 @@ class MCTSAI:
                 node = child
 
             # Simulation and backpropagation
-            reward = self._rollout(node.state, root_index, player)
+            reward = self._rollout(node.state, root_index)
             self.simulations_completed += 1
             while node is not None:
                 node.visits += 1
@@ -75,14 +94,19 @@ class MCTSAI:
                 node = node.parent
 
         if not root.children:
-            return max(
-                legal,
-                key=lambda p: evaluate_move(
-                    player, game.board.cells[p], p, player
-                ),
-            )
+            return random.choice(legal)
 
-        return max(root.children, key=lambda child: child.visits).move
+        best_child = max(root.children, key=lambda child: child.visits)
+        move = best_child.move
+        cell = game.board.cells[move]
+        average_score = best_child.total_reward / best_child.visits
+        self.last_reasoning = (
+            f"Selected {move}, the most-visited search option "
+            f"({best_child.visits}/{self.simulations_completed} simulations; "
+            f"average rollout score {average_score:+.2f}). It offers "
+            f"{cell.honey - cell.bees:+d} net honey."
+        )
+        return move
 
     def _safe_copy(self, game):
         state = copy.deepcopy(game)
@@ -94,10 +118,21 @@ class MCTSAI:
         child = copy.deepcopy(state)
         child.simulation_mode = True
         child.board.queen_position = None
-        child.move_player(child.players[player_index], move)
-        if not child.game_over:
+        actor = child.players[player_index]
+        moved = child.move_player(actor, move)
+        if moved and not child.game_over:
+            for observer in child.players:
+                observer.update_possible_queen_cells(child.board)
             child.complete_turn()
         return child
+
+    def _rollout_step(self, state, player_index, move):
+        actor = state.players[player_index]
+        moved = state.move_player(actor, move)
+        if moved and not state.game_over:
+            for observer in state.players:
+                observer.update_possible_queen_cells(state.board)
+            state.complete_turn()
 
     def _select_child(self, node, root_index):
         maximizing = node.state.current_index == root_index
@@ -117,22 +152,49 @@ class MCTSAI:
                 best, best_value = child, value
         return best
 
-    def _pick_expansion_move(self, state, moves, root_player):
+    def _pick_expansion_move(self, moves, state=None):
+        if state is None or len(moves) < 2:
+            return random.choice(moves)
         actor = state.current_player()
         ranked = sorted(
             moves,
-            key=lambda p: evaluate_move(
-                actor, state.board.cells[p], p, root_player
+            key=lambda position: move_profit_score(
+                state, actor, position
             ),
             reverse=True,
         )
-        pool = ranked[:min(3, len(ranked))]
-        return random.choice(pool)
+        return random.choice(ranked[:min(3, len(ranked))])
 
-    def _rollout(self, state, root_index, root_player):
+    def _rollout(self, state, root_index):
         current = copy.deepcopy(state)
         current.simulation_mode = True
         current.board.queen_position = None
+        if current.game_over:
+            if current.winner is current.players[root_index]:
+                return 1.0
+            if current.winner is current.players[1 - root_index]:
+                return -1.0
+            return 0.0
+
+        queen_candidates = set(
+            current.players[root_index].possible_queen_cells
+        )
+        if not queen_candidates:
+            queen_candidates = {
+                position
+                for position, cell in current.board.cells.items()
+                if not cell.visited
+            }
+
+        if queen_candidates:
+            sampled_queen = random.choice(tuple(queen_candidates))
+            visited_candidate = current.board.cells[sampled_queen]
+            if visited_candidate.visited:
+                owner = visited_candidate.owner
+                if owner is None:
+                    return 0.0
+                return -1.0 if owner == root_index else 1.0
+            current.board.queen_position = sampled_queen
 
         for _ in range(self.rollout_depth):
             if current.game_over:
@@ -145,20 +207,20 @@ class MCTSAI:
                 current.pass_turn()
                 continue
 
-            # Fuzzy-guided policy with exploration.
+            moves = avoid_certain_queen_moves(actor, moves)
             ranked = sorted(
                 moves,
-                key=lambda p: evaluate_move(
-                    actor, current.board.cells[p], p, root_player
+                key=lambda position: move_profit_score(
+                    current, actor, position
                 ),
                 reverse=True,
             )
-            if random.random() < 0.75:
+            if random.random() < 0.8:
                 move = random.choice(ranked[:min(3, len(ranked))])
             else:
                 move = random.choice(moves)
 
-            current = self._apply_move(
+            self._rollout_step(
                 current, current.current_index, move
             )
 

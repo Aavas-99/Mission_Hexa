@@ -9,11 +9,11 @@ from mcts_ai import MCTSAI
 from ui import UI
 
 
-def create_ai(player, difficulty):
+def create_ai(player, difficulty, ai_vs_ai=False):
     if player.ai_type == "minimax":
-        return MinimaxAI(difficulty)
+        return MinimaxAI("hard" if ai_vs_ai else difficulty)
     if player.ai_type == "mcts":
-        return MCTSAI(difficulty)
+        return MCTSAI("easy" if ai_vs_ai else difficulty)
     return None
 
 
@@ -69,7 +69,7 @@ def main():
                 elif event.key == pygame.K_r and not menu:
                     game = MissionHexaGame(mode, difficulty)
                     ai_players = {
-                        i: create_ai(player, difficulty)
+                        i: create_ai(player, difficulty, mode == "ai_vs_ai")
                         for i, player in enumerate(game.players)
                         if not player.is_human
                     }
@@ -82,7 +82,7 @@ def main():
                             mode = key
                             game = MissionHexaGame(mode, difficulty)
                             ai_players = {
-                                i: create_ai(player, difficulty)
+                                i: create_ai(player, difficulty, mode == "ai_vs_ai")
                                 for i, player in enumerate(game.players)
                                 if not player.is_human
                             }
@@ -118,6 +118,8 @@ def main():
 
                         if move is not None and move in game.legal_moves(player):
                             moved = game.move_player(player, move)
+                            if moved:
+                                game.last_move_reasoning = ai.last_reasoning
                             if moved and not game.game_over:
                                 game.complete_turn()
                         else:
