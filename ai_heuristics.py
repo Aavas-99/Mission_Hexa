@@ -21,6 +21,9 @@ def best_future_honey_gain(game, player, depth=2, discount=0.5):
     if opponent.alive and opponent.position is not None:
         blocked.add(opponent.position)
 
+    if len(player.possible_queen_cells) == 1:
+        blocked.add(next(iter(player.possible_queen_cells)))
+
     def search(position, honey, remaining, visited):
         if remaining == 0:
             return 0.0
@@ -61,6 +64,9 @@ def move_profit_score(game, player, position):
     blocked.add(position)
     if opponent.alive and opponent.position is not None:
         blocked.add(opponent.position)
+
+    if len(player.possible_queen_cells) == 1:
+        blocked.add(next(iter(player.possible_queen_cells)))
 
     next_gain = 0
     for next_position in game.board.get_neighbors(position):

@@ -3,7 +3,13 @@ import math
 import random
 
 from ai_heuristics import avoid_certain_queen_moves, move_profit_score
-from config import MCTS_ITERATIONS_WEAK, MCTS_ITERATIONS_STRONG
+from config import (
+    MCTS_ITERATIONS_EASY,
+    MCTS_ITERATIONS_MEDIUM,
+    MCTS_ITERATIONS_HARD,
+    MCTS_ITERATIONS_WEAK,
+    MCTS_ITERATIONS_STRONG,
+)
 
 
 class MCTSNode:
@@ -69,7 +75,8 @@ class MCTSAI:
             # Expansion
             if node.untried_moves and not node.state.game_over:
                 move = self._pick_expansion_move(
-                    node.untried_moves
+                    node.untried_moves,
+                    node.state,
                 )
                 node.untried_moves.remove(move)
                 actor_index = node.state.current_index
@@ -89,7 +96,17 @@ class MCTSAI:
         if not root.children:
             return random.choice(legal)
 
-        return max(root.children, key=lambda child: child.visits).move
+        best_child = max(root.children, key=lambda child: child.visits)
+        move = best_child.move
+        cell = game.board.cells[move]
+        average_score = best_child.total_reward / best_child.visits
+        self.last_reasoning = (
+            f"Selected {move}, the most-visited search option "
+            f"({best_child.visits}/{self.simulations_completed} simulations; "
+            f"average rollout score {average_score:+.2f}). It offers "
+            f"{cell.honey - cell.bees:+d} net honey."
+        )
+        return move
 
     def _safe_copy(self, game):
         state = copy.deepcopy(game)
@@ -100,8 +117,12 @@ class MCTSAI:
     def _apply_move(self, state, player_index, move):
         child = copy.deepcopy(state)
         child.simulation_mode = True
-        child.move_player(child.players[player_index], move)
-        if not child.game_over:
+        child.board.queen_position = None
+        actor = child.players[player_index]
+        moved = child.move_player(actor, move)
+        if moved and not child.game_over:
+            for observer in child.players:
+                observer.update_possible_queen_cells(child.board)
             child.complete_turn()
         return child
 
@@ -131,8 +152,18 @@ class MCTSAI:
                 best, best_value = child, value
         return best
 
-    def _pick_expansion_move(self, moves):
-        return random.choice(moves)
+    def _pick_expansion_move(self, moves, state=None):
+        if state is None or len(moves) < 2:
+            return random.choice(moves)
+        actor = state.current_player()
+        ranked = sorted(
+            moves,
+            key=lambda position: move_profit_score(
+                state, actor, position
+            ),
+            reverse=True,
+        )
+        return random.choice(ranked[:min(3, len(ranked))])
 
     def _rollout(self, state, root_index):
         current = copy.deepcopy(state)

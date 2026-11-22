@@ -17,6 +17,16 @@ def create_ai(player, difficulty, ai_vs_ai=False):
     return None
 
 
+def start_game(mode, difficulty):
+    game = MissionHexaGame(mode, difficulty)
+    ai_players = {
+        i: create_ai(player, difficulty, mode == "ai_vs_ai")
+        for i, player in enumerate(game.players)
+        if not player.is_human
+    }
+    return game, ai_players
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -27,7 +37,6 @@ def main():
     theme_index = 0
     difficulty = "medium"
     difficulty_options = ["easy", "medium", "hard"]
-    difficulty_index = 1
     speed_options = ["SLOW", "NORMAL", "FAST"]
     speed_index = 1
     speed = speed_options[speed_index]
@@ -37,6 +46,8 @@ def main():
     ai_players = {}
     ai_timer = 0.0
     menu = True
+    choosing_difficulty = False
+    pending_mode = None
     running = True
 
     while running:
@@ -49,46 +60,49 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if menu:
-                        running = False
+                        if choosing_difficulty:
+                            choosing_difficulty = False
+                            pending_mode = None
+                        else:
+                            running = False
                     else:
                         menu = True
 
                 elif event.key == pygame.K_t:
                     theme_index = (theme_index + 1) % len(THEMES)
 
-                elif event.key == pygame.K_d:
-                    difficulty_index = (
-                        difficulty_index + 1
-                    ) % len(difficulty_options)
-                    difficulty = difficulty_options[difficulty_index]
-
                 elif event.key == pygame.K_s:
                     speed_index = (speed_index + 1) % len(speed_options)
                     speed = speed_options[speed_index]
 
                 elif event.key == pygame.K_r and not menu:
-                    game = MissionHexaGame(mode, difficulty)
-                    ai_players = {
-                        i: create_ai(player, difficulty, mode == "ai_vs_ai")
-                        for i, player in enumerate(game.players)
-                        if not player.is_human
-                    }
+                    game, ai_players = start_game(mode, game.difficulty)
                     ai_timer = 0.0
 
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 if menu:
-                    for key, rect in ui.menu_buttons.items():
-                        if rect.collidepoint(event.pos):
-                            mode = key
-                            game = MissionHexaGame(mode, difficulty)
-                            ai_players = {
-                                i: create_ai(player, difficulty, mode == "ai_vs_ai")
-                                for i, player in enumerate(game.players)
-                                if not player.is_human
-                            }
-                            ai_timer = 0.0
-                            menu = False
-                            break
+                    if choosing_difficulty:
+                        for level, rect in ui.difficulty_buttons.items():
+                            if rect.collidepoint(event.pos):
+                                difficulty = level
+                                mode = pending_mode
+                                game, ai_players = start_game(mode, difficulty)
+                                ai_timer = 0.0
+                                menu = False
+                                choosing_difficulty = False
+                                break
+                    else:
+                        for key, rect in ui.menu_buttons.items():
+                            if rect.collidepoint(event.pos):
+                                if key in ("human_minimax", "human_mcts"):
+                                    pending_mode = key
+                                    choosing_difficulty = True
+                                else:
+                                    mode = key
+                                    game, ai_players = start_game(mode, difficulty)
+                                    ai_timer = 0.0
+                                    menu = False
+                                break
                 elif game and not game.game_over:
                     player = game.current_player()
                     if player.is_human:
@@ -100,7 +114,12 @@ def main():
                             ai_timer = 0.0
 
         if menu:
-            ui.draw_menu(theme_index, mode, difficulty, speed)
+            if choosing_difficulty:
+                ui.draw_difficulty_selection(
+                    theme_index, pending_mode, difficulty_options
+                )
+            else:
+                ui.draw_menu(theme_index, mode, speed)
         else:
             if game and not game.game_over:
                 player = game.current_player()
@@ -127,7 +146,7 @@ def main():
 
                         ai_timer = 0.0
 
-            ui.draw_game(game, theme_index, difficulty, speed)
+            ui.draw_game(game, theme_index, speed=speed)
 
         pygame.display.flip()
 
