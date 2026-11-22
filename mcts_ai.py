@@ -26,17 +26,18 @@ class MCTSNode:
 class MCTSAI:
     """Monte Carlo Tree Search using UCT and random rollouts."""
 
-    def __init__(self, difficulty="strong"):
+    def __init__(self, difficulty="hard"):
         difficulty = difficulty.lower()
         if difficulty == "easy":
-            self.iterations = 30
+            self.iterations = MCTS_ITERATIONS_EASY
         elif difficulty == "medium":
-            self.iterations = MCTS_ITERATIONS_WEAK
+            self.iterations = MCTS_ITERATIONS_MEDIUM
         else:
-            self.iterations = MCTS_ITERATIONS_STRONG
+            self.iterations = MCTS_ITERATIONS_HARD
         self.exploration_constant = math.sqrt(2)
         self.rollout_depth = 16
         self.simulations_completed = 0
+        self.last_reasoning = None
 
     def choose_move(self, game, player):
         legal = avoid_certain_queen_moves(
@@ -45,7 +46,13 @@ class MCTSAI:
         if not legal:
             return None
         if len(legal) == 1:
-            return legal[0]
+            position = legal[0]
+            cell = game.board.cells[position]
+            self.last_reasoning = (
+                f"Selected the only safe move, {position}; it offers "
+                f"{cell.honey - cell.bees:+d} net honey."
+            )
+            return position
 
         root_index = game.players.index(player)
         root_state = self._safe_copy(game)
@@ -97,6 +104,14 @@ class MCTSAI:
         if not child.game_over:
             child.complete_turn()
         return child
+
+    def _rollout_step(self, state, player_index, move):
+        actor = state.players[player_index]
+        moved = state.move_player(actor, move)
+        if moved and not state.game_over:
+            for observer in state.players:
+                observer.update_possible_queen_cells(state.board)
+            state.complete_turn()
 
     def _select_child(self, node, root_index):
         maximizing = node.state.current_index == root_index
@@ -174,7 +189,7 @@ class MCTSAI:
             else:
                 move = random.choice(moves)
 
-            current = self._apply_move(
+            self._rollout_step(
                 current, current.current_index, move
             )
 

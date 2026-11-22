@@ -8,16 +8,17 @@ from ai_heuristics import (
 from config import MINIMAX_DEPTH_WEAK, MINIMAX_DEPTH_STRONG
 
 class MinimaxAI:
-    def __init__(self, difficulty="strong"):
+    def __init__(self, difficulty="hard"):
         difficulty = difficulty.lower()
         if difficulty == "easy":
-            self.depth = 1
+            self.depth = MINIMAX_DEPTH_EASY
         elif difficulty == "medium":
-            self.depth = MINIMAX_DEPTH_WEAK
+            self.depth = MINIMAX_DEPTH_MEDIUM
         else:
-            self.depth = MINIMAX_DEPTH_STRONG
+            self.depth = MINIMAX_DEPTH_HARD
         self.nodes_explored = 0
         self.pruned_branches = 0
+        self.last_reasoning = None
 
     def choose_move(self, game, player):
         moves = avoid_certain_queen_moves(
@@ -49,6 +50,14 @@ class MinimaxAI:
                 best_value, best_move = value, move
             alpha = max(alpha, best_value)
 
+        cell = game.board.cells[best_move]
+        risk = self._queen_move_probability(player, best_move)
+        risk_text = f"{risk:.0%} estimated queen risk" if risk else "no known queen risk"
+        self.last_reasoning = (
+            f"Selected {best_move} for its best depth-{self.depth} "
+            f"evaluation. It offers {cell.honey - cell.bees:+d} net honey "
+            f"with {risk_text}; searched {self.nodes_explored} positions."
+        )
         return best_move
 
     def _copy_for_search(self, game):
@@ -62,8 +71,10 @@ class MinimaxAI:
         child.simulation_mode = True
         child.board.queen_position = None
         actor = child.players[player_index]
-        child.move_player(actor, move)
-        if not child.game_over:
+        moved = child.move_player(actor, move)
+        if moved and not child.game_over:
+            for observer in child.players:
+                observer.update_possible_queen_cells(child.board)
             child.complete_turn()
         return child
 
@@ -130,8 +141,6 @@ class MinimaxAI:
     def _evaluate(self, state, root_index):
         me = state.players[root_index]
         other = state.players[1 - root_index]
-        score = float(me.honey - other.honey)
-
         my_moves = state.legal_moves(me)
         their_moves = state.legal_moves(other)
         score += 1.7 * (len(my_moves) - len(their_moves))

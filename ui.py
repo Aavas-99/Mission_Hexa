@@ -244,10 +244,10 @@ class UI:
         # mode buttons
         self.menu_buttons = {}
         options = [
-            ("human_minimax", "Human vs Minimax AI"),
-            ("human_mcts", "Human vs MCTS AI"),
-            ("ai_vs_ai", "Minimax AI vs MCTS AI"),
-            ("human_human", "Human vs Human"),
+            ("human_minimax", "Human vs Minimax", "Outsmart the tactical search AI"),
+            ("human_mcts", "Human vs MCTS", "Challenge a probabilistic opponent"),
+            ("ai_vs_ai", "Minimax vs MCTS", "Watch both algorithms compete"),
+            ("human_human", "Human vs Human", "Play locally with a friend"),
         ]
         bx = WIDTH // 2 - 230
         for i, (key, label) in enumerate(options):
