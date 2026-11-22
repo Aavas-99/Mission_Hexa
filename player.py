@@ -31,8 +31,9 @@ class Player:
 
     def update_possible_queen_cells(self, board):
         possible = set(board.cells)
-        for visited_position in self.knowledge:
-            possible.discard(visited_position)
+        for position, cell in board.cells.items():
+            if cell.visited:
+                possible.discard(position)
 
         for position, clue in self.knowledge.items():
             neighbors = set(board.get_neighbors(position))

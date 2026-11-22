@@ -153,7 +153,7 @@ class UI:
         return rect
 
     def draw_button(self, rect, text, theme, key=None,
-                    selected=False, hovered=False, caption=None, index=None):
+                    selected=False, hovered=False):
         shadow = rect.move(0, 4)
         pygame.draw.rect(
             self.screen,
@@ -163,46 +163,21 @@ class UI:
         fill = theme["button_hover"] if hovered else theme["button"]
         pygame.draw.rect(self.screen, fill, rect, border_radius=13)
         border = (
-            self._mix(theme["border"], theme["text"], 0.25)
+            theme["accent"] if selected
+            else self._mix(theme["border"], theme["text"], 0.25)
         )
         pygame.draw.rect(
-            self.screen, border, rect, 2, border_radius=13
+            self.screen, border, rect, 3 if selected else 2, border_radius=13
         )
-        icon_rect = pygame.Rect(rect.x + 18, rect.y + 13, 42, rect.height - 26)
-        pygame.draw.rect(
-            self.screen,
-            self._mix(theme["panel"], theme["accent"], 0.12),
-            icon_rect,
-            border_radius=10,
-        )
-        pygame.draw.rect(
-            self.screen,
-            self._mix(theme["accent"], theme["panel"], 0.35),
-            icon_rect,
-            1,
-            border_radius=10,
-        )
-        icon_label = f"{index + 1:02d}" if index is not None else ""
-        self.draw_text(
-            icon_label, (0, 0), self.small_font,
-            theme["accent"], center=icon_rect.center,
-        )
-        text_x = rect.x + 78
-        title_image = self.font.render(text, True, theme["text"])
-        title_rect = title_image.get_rect(
-            midleft=(text_x, rect.centery - (8 if caption else 0))
-        )
-        self.screen.blit(title_image, title_rect)
-        if caption:
-            caption_image = self.tiny_font.render(
-                caption, True, self._muted(theme)
+        if selected:
+            bar = pygame.Rect(
+                rect.x + 12, rect.y + 13, 5, rect.height - 26
             )
-            self.screen.blit(
-                caption_image,
-                caption_image.get_rect(
-                    midleft=(text_x, rect.centery + 16)
-                ),
+            pygame.draw.rect(
+                self.screen, theme["legal_move"], bar, border_radius=3
             )
+        image = self.font.render(text, True, theme["text"])
+        self.screen.blit(image, image.get_rect(center=rect.center))
         if key:
             self.menu_buttons[key] = rect
 
@@ -237,35 +212,33 @@ class UI:
         )
         mouse = pygame.mouse.get_pos()
 
-        # subtle frame and ambient background geometry
+        # ambient hexagon rings
         for cx, cy, r, w, a in [
-            (1280, 150, 175, 3, 34), (1325, 330, 92, 2, 24),
-            (155, 760, 210, 3, 30), (320, 650, 82, 2, 20),
+            (1255, 150, 170, 3, 42), (1330, 330, 90, 2, 30),
+            (210, 750, 200, 3, 36), (330, 640, 80, 2, 26),
+            (760, 55, 55, 2, 28),
         ]:
             ring = self._hex_ring(theme["accent"], r, w, a)
             self.screen.blit(
-                ring,
-                (cx - ring.get_width() // 2, cy - ring.get_height() // 2),
+                ring, (cx - ring.get_width() // 2, cy - ring.get_height() // 2)
             )
 
-        frame = pygame.Rect(96, 54, WIDTH - 192, HEIGHT - 108)
-        pygame.draw.rect(
-            self.screen,
-            (*theme["panel"], 0),
-            frame,
-            border_radius=24,
+        # title with soft glow
+        glow = self.title_font.render(
+            "MISSION HEXA",
+            True, self._mix(theme["accent"], theme["background"], 0.35),
         )
-
+        self.screen.blit(glow, glow.get_rect(center=(WIDTH // 2 + 4, 142)))
         title = self.title_font.render("MISSION HEXA", True, theme["accent"])
-        self.screen.blit(title, title.get_rect(center=(WIDTH // 2, 142)))
+        self.screen.blit(title, title.get_rect(center=(WIDTH // 2, 135)))
         subtitle = self.font.render(
-            "A hidden-queen honeycomb strategy game",
-            True, muted,
+            "A hidden-Queen honeycomb strategy game",
+            True, self._mix(theme["text"], theme["background"], 0.15),
         )
-        self.screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, 195)))
+        self.screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, 198)))
         self.draw_text(
-            "SELECT GAME MODE", (0, 0),
-            self.tiny_font, theme["text"], center=(WIDTH // 2, 244),
+            "C H O O S E   A   G A M E   M O D E", (0, 0),
+            self.tiny_font, muted, center=(WIDTH // 2, 252),
         )
 
         # mode buttons
@@ -276,14 +249,13 @@ class UI:
             ("ai_vs_ai", "Minimax vs MCTS", "Watch both algorithms compete"),
             ("human_human", "Human vs Human", "Play locally with a friend"),
         ]
-        bx = WIDTH // 2 - 255
-        for i, (key, label, caption) in enumerate(options):
-            rect = pygame.Rect(bx, 272 + i * 68, 510, 58)
+        bx = WIDTH // 2 - 230
+        for i, (key, label) in enumerate(options):
+            rect = pygame.Rect(bx, 286 + i * 74, 460, 56)
             hovered = rect.collidepoint(mouse)
             self.draw_button(
                 rect, label, theme, key,
                 selected=(mode == key), hovered=hovered,
-                caption=caption, index=i,
             )
 
         # settings chips
@@ -292,39 +264,33 @@ class UI:
             ("AI SPEED", speed, "S"),
             ("THEME", theme["name"].upper(), "T"),
         ]
-        cw, chh, gap = 292, 72, 24
+        cw, chh, gap = 292, 66, 24
         total = cw * 3 + gap * 2
         x0 = WIDTH // 2 - total // 2
         for i, (label, value, hotkey) in enumerate(chips):
-            rect = pygame.Rect(x0 + i * (cw + gap), 560, cw, chh)
+            rect = pygame.Rect(x0 + i * (cw + gap), 606, cw, chh)
             pygame.draw.rect(
                 self.screen,
                 self._mix(theme["panel"], (255, 255, 255), 0.03),
-                rect, border_radius=12,
+                rect, border_radius=14,
             )
             pygame.draw.rect(
                 self.screen,
                 self._mix(theme["accent"], theme["panel"], 0.55),
-                rect, 1, border_radius=12,
+                rect, 1, border_radius=14,
             )
-            self.draw_text(
-                label, (rect.x + 18, rect.y + 11),
-                self.tiny_font, muted,
-            )
-            self.draw_text(
-                value, (rect.x + 18, rect.y + 34),
-                self.font, theme["text"],
-            )
-            tag = pygame.Rect(rect.right - 44, rect.y + 12, 28, 22)
-            pygame.draw.rect(
-                self.screen, theme["button"], tag, border_radius=6
-            )
+            self.draw_text(label, (rect.x + 18, rect.y + 9),
+                           self.tiny_font, muted)
+            self.draw_text(value, (rect.x + 18, rect.y + 28),
+                           self.font, theme["text"])
+            tag = pygame.Rect(rect.right - 42, rect.y + 8, 26, 20)
+            pygame.draw.rect(self.screen, theme["button"], tag, border_radius=5)
             self.draw_text(hotkey, (0, 0), self.tiny_font, theme["accent"],
                            center=tag.center)
 
         self.draw_text(
             "Click a mode to start  •  ESC exits", (0, 0),
-            self.small_font, muted, center=(WIDTH // 2, 676),
+            self.small_font, muted, center=(WIDTH // 2, 714),
         )
 
     # ------------------------------------------------------------------ #
@@ -418,8 +384,9 @@ class UI:
                     center=(center[0], center[1] + 11),
                 )
             elif cell.owner is not None:
-                label = f"P{cell.owner + 1}"
                 clue = game.players[cell.owner].knowledge.get(position)
+                marker = "+" if clue is True else "-" if clue is False else ""
+                label = f"P{cell.owner + 1}{marker}"
                 label_color = PHEROMONE_COLOR if clue is True else WHITE
                 self.draw_text(
                     label, (0, 0), self.cell_font, label_color, center=center
@@ -472,29 +439,10 @@ class UI:
             mode_value, mode_value.get_rect(midright=(chip.right - 14, chip.centery))
         )
 
-        # current turn
-        current = game.current_player()
-        turn_card = pygame.Rect(x, chip.bottom + 10, w, 54)
-        pygame.draw.rect(self.screen, panel_alt, turn_card, border_radius=10)
-        pygame.draw.rect(
-            self.screen, current.color, turn_card, 1, border_radius=10
-        )
-        self.draw_text(
-            "CURRENT MOVE", (turn_card.x + 14, turn_card.y + 8),
-            self.tiny_font, muted,
-        )
-        turn_value = (
-            "GAME OVER" if game.game_over else current.name.upper()
-        )
-        self.draw_text(
-            turn_value, (turn_card.x + 14, turn_card.y + 26),
-            self.font, current.color,
-        )
-
         # player cards
-        y = turn_card.bottom + 10
+        y = chip.bottom + 14
         for player in game.players:
-            card = pygame.Rect(x, y, w, 100)
+            card = pygame.Rect(x, y, w, 116)
             pygame.draw.rect(self.screen, panel_alt, card, border_radius=12)
             pygame.draw.rect(self.screen, player.color, card, 2, border_radius=12)
             pygame.draw.circle(
@@ -507,53 +455,36 @@ class UI:
                 player.name, (card.x + 40, card.y + 12),
                 self.font, theme["text"]
             )
-            if player.is_human:
-                kind = "Human"
-            elif player.ai_type == "minimax":
-                kind = "Minimax"
-            elif player.ai_type == "mcts":
-                kind = "MCTS"
-            else:
-                kind = "AI"
-            kind_img = self.tiny_font.render(kind, True, theme["text"])
-            badge_rect = kind_img.get_rect(midright=(card.right - 18, card.y + 24))
-            pill_rect = badge_rect.inflate(16, 8)
-            pygame.draw.rect(
-                self.screen,
-                self._mix(theme["panel"], (255, 255, 255), 0.05),
-                pill_rect, border_radius=6,
+            kind = "HUMAN" if player.is_human else "AI"
+            kind_img = self.tiny_font.render(kind, True, muted)
+            self.screen.blit(
+                kind_img, kind_img.get_rect(midright=(card.right - 14, card.y + 24))
             )
-            pygame.draw.rect(
-                self.screen,
-                self._mix(theme["accent"], theme["panel"], 0.4),
-                pill_rect, 1, border_radius=6,
-            )
-            self.screen.blit(kind_img, badge_rect)
             if not player.alive:
                 dead = self.small_font.render("ELIMINATED", True, PHEROMONE_COLOR)
                 self.screen.blit(
                     dead, dead.get_rect(midright=(card.right - 14, card.y + 46))
                 )
             self.draw_text(
-                "HONEY", (card.x + 16, card.y + 40), self.tiny_font, muted
+                "HONEY", (card.x + 16, card.y + 46), self.tiny_font, muted
             )
             self.draw_text(
-                str(player.honey), (card.x + 16, card.y + 54),
-                self.medium_font, player.color
+                str(player.honey), (card.x + 16, card.y + 62),
+                self.num_font, player.color
             )
             info = (
                 f"Pos {player.position}  •  "
                 f"Visited {len(player.visited_cells)}"
             )
             self.draw_text(
-                info, (card.x + 112, card.y + 58),
-                self.small_font, theme["text"]
+                info, (card.x + 16, card.y + 94), self.small_font, theme["text"]
             )
-            y = card.bottom + 10
+            y = card.bottom + 12
 
         # queen radar
-        sec = y + 2
+        sec = y + 10
         self.draw_text("QUEEN RADAR", (x, sec), self.tiny_font, theme["accent"])
+        current = game.current_player()
         n = len(current.possible_queen_cells)
         self.draw_text(
             f"{current.name}: {n} possible hideout"
@@ -591,57 +522,11 @@ class UI:
             center=clue_rect.center
         )
 
-        # last-move reasoning
-        reason_card = pygame.Rect(x, clue_rect.bottom + 12, w, 112)
-        pygame.draw.rect(self.screen, panel_alt, reason_card, border_radius=10)
-        pygame.draw.rect(
-            self.screen,
-            self._mix(theme["accent"], theme["panel"], 0.55),
-            reason_card,
-            1,
-            border_radius=10,
-        )
-        if game.last_move_by is None:
-            reason_title = "LAST AI MOVE"
-            reasoning = "No AI move has been made yet."
-            reason_color = muted
-        elif game.last_move_by.is_human:
-            reason_title = "LAST MOVE: HUMAN"
-            reasoning = "Not applicable to human moves."
-            reason_color = muted
-        else:
-            reason_title = f"LAST AI MOVE: {game.last_move_by.name.upper()}"
-            reasoning = (
-                game.last_move_reasoning or "Move reasoning is unavailable."
-            )
-            reason_color = theme["text"]
-        self.draw_text(
-            reason_title, (reason_card.x + 12, reason_card.y + 9),
-            self.tiny_font, theme["accent"],
-        )
-        max_width = reason_card.width - 24
-        lines = []
-        line = ""
-        for word in reasoning.split():
-            candidate = f"{line} {word}".strip()
-            if line and self.small_font.size(candidate)[0] > max_width:
-                lines.append(line)
-                line = word
-            else:
-                line = candidate
-        if line:
-            lines.append(line)
-        for line_index, text in enumerate(lines[:4]):
-            self.draw_text(
-                text, (reason_card.x + 12, reason_card.y + 32 + line_index * 17),
-                self.small_font, reason_color,
-            )
-
         # controls
-        cy = reason_card.bottom + 12
+        cy = clue_rect.bottom + 24
         self.draw_text("CONTROLS", (x, cy), self.tiny_font, theme["accent"])
         hints = [
-            ("R", "Restart"), ("T", "Theme"),
+            ("R", "Restart"), ("T", "Theme"), ("D", "Difficulty"),
             ("S", "Speed"), ("ESC", "Menu"),
         ]
         for i, (key, label) in enumerate(hints):
@@ -649,7 +534,10 @@ class UI:
             hy = cy + 22 + (i // 2) * 30
             self._key_hint(hx, hy, key, label, theme)
 
-        footer = f"Theme {theme['name']}  •  {speed}"
+        footer = (
+            f"Theme {theme['name']}  •  "
+            f"{difficulty.upper()}  •  {speed}"
+        )
         self.draw_text(
             footer, (0, 0), self.tiny_font, muted,
             center=(panel.centerx, panel.bottom - 18),
