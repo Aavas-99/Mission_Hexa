@@ -2,8 +2,6 @@
 
 Mission Hexa is a desktop strategy game built with Python and Pygame. Players explore a randomized honeycomb, manage honey and bee costs, use pheromone clues to narrow down the hidden Queen Bee's location, and try to outlast their opponent.
 
-![Mission Hexa home screen](Screenshots/HomePage.png)
-
 ## Features
 
 - An 8 x 8 hexagonal board with randomly generated cell resources and a hidden Queen Bee.
@@ -98,8 +96,6 @@ The visited-cell clue and Queen Radar help narrow down possible locations of the
 Each match ends with a result overlay and the players' honey totals. Outcomes vary because the board and Queen location are randomized.
 
 ![Minimax wins an AI-versus-AI match](Screenshots/Match_Result1_AI_VS_AI.png)
-
-![Minimax wins a Human-versus-AI match](Screenshots/Match_Result2_AI_VS_Human.png)
 
 ![MCTS wins an AI-versus-AI match](Screenshots/Match_Result3_AI_VS_AI.png)
 
