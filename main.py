@@ -1,3 +1,4 @@
+import asyncio
 import sys
 import pygame
 
@@ -27,7 +28,7 @@ def start_game(mode, difficulty):
     return game, ai_players
 
 
-def main():
+async def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Mission Hexa")
@@ -149,10 +150,11 @@ def main():
             ui.draw_game(game, theme_index, speed=speed)
 
         pygame.display.flip()
+        await asyncio.sleep(0)
 
-    pygame.quit()
-    sys.exit()
+    if sys.platform != "emscripten":
+        pygame.quit()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

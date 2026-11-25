@@ -115,6 +115,22 @@ py -m pip install pygame
 py main.py
 ```
 
+## Play in a web browser
+
+The browser version is built with Pygbag and published to GitHub Pages:
+
+<https://aavas-99.github.io/Mission_Hexa/>
+
+To build it locally, install Pygbag and run:
+
+```bash
+python -m pip install pygbag
+python -m pygbag --ume_block 0 .
+```
+
+The GitHub Actions workflow rebuilds and deploys the browser version whenever
+changes are pushed to `main`.
+
 ## Controls
 
 | Input | Action |
